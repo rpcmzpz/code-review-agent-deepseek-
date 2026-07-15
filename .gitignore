@@ -1,0 +1,15 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Maven
+target/
+
+# API Key 等敏感配置
+application-local.yml
+*.env
+
+# OS
+.DS_Store
+Thumbs.db

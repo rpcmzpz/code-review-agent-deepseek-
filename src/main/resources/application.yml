@@ -1,0 +1,14 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: code-review-agent
+  profiles:
+    active: local
+
+# DeepSeek API 配置（Day 2 接入时使用）
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:}
+  base-url: https://api.deepseek.com/v1
+  model: deepseek-chat
