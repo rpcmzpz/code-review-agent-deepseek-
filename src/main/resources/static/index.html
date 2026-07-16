@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>代码审查 Agent</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      background: #f5f6f8;
+      color: #24292f;
+      min-height: 100vh;
+      padding: 32px 16px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    .subtitle { color: #656d76; font-size: 13px; margin-bottom: 24px; }
+
+    .card {
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px; }
+
+    textarea {
+      width: 100%;
+      height: 260px;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 12px;
+      resize: vertical;
+      background: #f6f8fa;
+    }
+    textarea:focus { outline: 2px solid #0969da33; border-color: #0969da; }
+
+    .row { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+    select {
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      background: #fff;
+    }
+    .dims { display: flex; gap: 16px; }
+    .dims label { display: flex; align-items: center; gap: 6px; font-weight: 400; margin: 0; cursor: pointer; }
+
+    button {
+      margin-left: auto;
+      background: #1f883d;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #1a7f37; }
+    button:disabled { background: #94d3a2; cursor: not-allowed; }
+
+    .label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .label-row label { margin: 0; }
+    .btn-link {
+      margin: 0;
+      background: none;
+      border: 1px solid #d0d7de;
+      color: #0969da;
+      font-size: 12px;
+      font-weight: 400;
+      padding: 3px 10px;
+      border-radius: 6px;
+    }
+    .btn-link:hover { background: #f6f8fa; }
+
+    .elapsed { font-size: 13px; color: #656d76; font-weight: 400; }
+
+    /* ===== 结果区 ===== */
+    #result { display: none; }
+    .summary-bar {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .summary-bar .count { font-size: 18px; font-weight: 700; }
+    .summary-text { color: #57606a; font-size: 13px; line-height: 1.6; }
+
+    .issue {
+      border: 1px solid #d0d7de;
+      border-left-width: 4px;
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    .issue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      letter-spacing: 0.5px;
+    }
+    .issue.error   { border-left-color: #cf222e; }
+    .issue.warning { border-left-color: #d4a72c; }
+    .issue.info    { border-left-color: #0969da; }
+    .badge.error   { background: #ffebe9; color: #cf222e; }
+    .badge.warning { background: #fff8c5; color: #7d4e00; }
+    .badge.info    { background: #ddf4ff; color: #0969da; }
+    .issue-title { font-weight: 600; font-size: 14px; }
+    .issue-meta { font-size: 12px; color: #656d76; }
+    .issue-desc { font-size: 13px; line-height: 1.6; color: #24292f; }
+    .issue-suggestion {
+      margin-top: 8px;
+      font-size: 13px;
+      line-height: 1.6;
+      background: #f6f8fa;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #1a7f37;
+    }
+    .error-msg {
+      background: #ffebe9;
+      border: 1px solid #cf222e44;
+      color: #cf222e;
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 13px;
+    }
+    .empty { color: #1a7f37; font-size: 14px; padding: 8px 0; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🔍 代码审查 Agent</h1>
+  <p class="subtitle">SpringBoot + DeepSeek · 多维度并行审查</p>
+
+  <!-- ===== 输入区 ===== -->
+  <div class="card">
+    <div class="label-row">
+      <label for="code">待审查代码</label>
+      <button id="sampleBtn" class="btn-link" type="button">加载示例</button>
+    </div>
+    <textarea id="code" placeholder="把代码粘贴到这里..." spellcheck="false"></textarea>
+
+    <div class="row">
+      <div>
+        <select id="language">
+          <option value="python">Python</option>
+          <option value="java">Java</option>
+          <option value="javascript">JavaScript</option>
+          <option value="cpp">C++</option>
+          <option value="go">Go</option>
+        </select>
+      </div>
+
+      <div class="dims">
+        <label><input type="checkbox" name="dim" value="bug" checked> 缺陷检测</label>
+        <label><input type="checkbox" name="dim" value="security"> 安全审计</label>
+        <label><input type="checkbox" name="dim" value="performance"> 性能优化</label>
+      </div>
+
+      <button id="submitBtn">开始审查</button>
+    </div>
+  </div>
+
+  <!-- ===== 结果区 ===== -->
+  <div id="result" class="card"></div>
+</div>
+
+<script>
+  const btn = document.getElementById('submitBtn');
+  const resultBox = document.getElementById('result');
+
+  // 示例代码：三个维度都有可检出的问题（SQL注入/硬编码密码/空指针/除零/循环建连接/O(n²)）
+  const SAMPLE_CODE = `import sqlite3
+
+DB_PASSWORD = "root123456"
+
+def get_user(username):
+    conn = sqlite3.connect("app.db")
+    cursor = conn.cursor()
+    sql = "SELECT * FROM users WHERE name = '" + username + "'"
+    cursor.execute(sql)
+    return cursor.fetchone()
+
+def get_average_age(usernames):
+    total = 0
+    for name in usernames:
+        user = get_user(name)
+        total += user[2]
+    return total / len(usernames)
+
+def find_duplicates(items):
+    result = []
+    for i in range(len(items)):
+        for j in range(len(items)):
+            if i != j and items[i] == items[j] and items[i] not in result:
+                result.append(items[i])
+    return result
+`;
+
+  document.getElementById('sampleBtn').addEventListener('click', () => {
+    document.getElementById('code').value = SAMPLE_CODE;
+    document.getElementById('language').value = 'python';
+    document.querySelectorAll('input[name="dim"]').forEach(cb => cb.checked = true);
+  });
+
+  btn.addEventListener('click', async () => {
+    // 1. 收集表单数据 —— 字段名必须和后端 CodeReviewRequest 完全一致
+    const code = document.getElementById('code').value;
+    const language = document.getElementById('language').value;
+    const dimensions = [...document.querySelectorAll('input[name="dim"]:checked')]
+      .map(cb => cb.value);
+
+    if (!code.trim()) {
+      showError('请先粘贴要审查的代码');
+      return;
+    }
+    if (dimensions.length === 0) {
+      showError('至少勾选一个审查维度');
+      return;
+    }
+
+    // 2. loading 状态：LLM 要跑十几秒，禁用按钮防止重复提交
+    btn.disabled = true;
+    btn.textContent = '审查中，请稍候...';
+    resultBox.style.display = 'none';
+
+    try {
+      // 3. 调后端接口 —— 对标 httpx.post(url, json=body)
+      //    计时：验证多维度并行的效果（N 个维度 ≈ 单次 API 耗时，而非 N 倍）
+      const t0 = performance.now();
+      const response = await fetch('/api/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, language, dimensions, context: '' })
+      });
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status);
+      }
+      const data = await response.json();  // CodeReviewResponse
+      const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+
+      if (!data.success) {
+        showError(data.summary || '审查失败');
+        return;
+      }
+      renderResult(data, dimensions.length, elapsed);
+    } catch (err) {
+      showError('请求失败：' + err.message + '（后端服务是否已启动？）');
+    } finally {
+      // 4. 无论成败都恢复按钮
+      btn.disabled = false;
+      btn.textContent = '开始审查';
+    }
+  });
+
+  function renderResult(data, dimCount, elapsed) {
+    resultBox.innerHTML = '';
+    resultBox.style.display = 'block';
+
+    // 顶部统计条
+    const bar = document.createElement('div');
+    bar.className = 'summary-bar';
+    const count = document.createElement('span');
+    count.className = 'count';
+    count.textContent = '共发现 ' + data.totalIssues + ' 个问题';
+    bar.appendChild(count);
+
+    const timing = document.createElement('span');
+    timing.className = 'elapsed';
+    timing.textContent = dimCount + ' 个维度并行 · 耗时 ' + elapsed + 's';
+    bar.appendChild(timing);
+    resultBox.appendChild(bar);
+
+    const summary = document.createElement('p');
+    summary.className = 'summary-text';
+    summary.textContent = data.summary || '';
+    summary.style.marginBottom = '16px';
+    resultBox.appendChild(summary);
+
+    if (!data.issues || data.issues.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = '✅ 未发现问题';
+      resultBox.appendChild(empty);
+      return;
+    }
+
+    // issue 卡片 —— 用 textContent 而不是 innerHTML 拼接，
+    // 防止 LLM 返回内容里带 <script> 造成 XSS（安全维度审查自己也得过关）
+    const DIM_LABELS = { bug: '缺陷检测', security: '安全审计', performance: '性能优化' };
+    for (const issue of data.issues) {
+      const sev = (issue.severity || 'info').toLowerCase();
+      const level = ['error', 'warning', 'info'].includes(sev) ? sev : 'info';
+
+      const card = document.createElement('div');
+      card.className = 'issue ' + level;
+
+      const head = document.createElement('div');
+      head.className = 'issue-head';
+
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + level;
+      badge.textContent = (issue.severity || 'INFO').toUpperCase();
+      head.appendChild(badge);
+
+      const title = document.createElement('span');
+      title.className = 'issue-title';
+      title.textContent = issue.title || '(无标题)';
+      head.appendChild(title);
+
+      const meta = document.createElement('span');
+      meta.className = 'issue-meta';
+      meta.textContent = '第 ' + issue.line + ' 行 · ' + (DIM_LABELS[issue.category] || issue.category || '');
+      head.appendChild(meta);
+
+      card.appendChild(head);
+
+      const desc = document.createElement('p');
+      desc.className = 'issue-desc';
+      desc.textContent = issue.description || '';
+      card.appendChild(desc);
+
+      if (issue.suggestion) {
+        const sug = document.createElement('div');
+        sug.className = 'issue-suggestion';
+        sug.textContent = '💡 ' + issue.suggestion;
+        card.appendChild(sug);
+      }
+
+      resultBox.appendChild(card);
+    }
+  }
+
+  function showError(msg) {
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'error-msg';
+    div.textContent = msg;
+    resultBox.appendChild(div);
+  }
+</script>
+</body>
+</html>

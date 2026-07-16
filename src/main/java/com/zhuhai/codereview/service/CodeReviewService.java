@@ -29,8 +29,7 @@ public class CodeReviewService {
       {
         "issues": [
           {
-            "severity": "ERROR",
-            "category": "维度名",
+            "severity": "ERROR/WARNING/INFO 三选一：ERROR=会导致故障或安全事故，WARNING=有隐患需改进，INFO=建议优化",
             "line": 行号,
             "title": "简短标题",
             "description": "问题描述",
@@ -63,7 +62,7 @@ public class CodeReviewService {
         String systemPrompt = buildPrompt(dimension);
         List<Map<String, String>> messages = List.of(
             Map.of("role", "system", "content", systemPrompt),
-            Map.of("role", "user", "content", "请审查以下代码：\n" + request.getCode() + "\n语言：" + request.getLanguage())
+            Map.of("role", "user", "content", "请审查以下代码：\n" + request.getCode() + "\n语言：" + request.getLanguage() + "\n若标注语言与代码实际内容不符，以代码的实际内容为准")
         );
         String responseJson = deepSeekClient.chat(messages);
         responseJson = responseJson.replaceAll("^```(json)?|```$", "").trim();
@@ -72,6 +71,8 @@ public class CodeReviewService {
         List<Issue> issues = (issuesNode != null && issuesNode.isArray())
           ? objectMapper.readValue(issuesNode.traverse(), new TypeReference<List<Issue>>() {})
           : List.of();
+        // category 由后端按维度写死 —— 后端已知的信息不依赖 LLM 返回，prompt 约束是软的
+        issues.forEach(issue -> issue.setCategory(dimension));
         String summary = root.has("summary") ? root.get("summary").asText() : "";
         return new DimResult(issues, summary);
       } catch (Exception e) {
